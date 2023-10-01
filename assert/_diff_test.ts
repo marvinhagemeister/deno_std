@@ -1,5 +1,5 @@
 // Copyright 2018-2023 the Deno authors. All rights reserved. MIT license.
-import { diff, diffstr, DiffType } from "./_diff.ts";
+import { diff, diffSequence, diffstr, DiffType } from "./_diff.ts";
 import { assertEquals } from "./assert_equals.ts";
 
 Deno.test({
@@ -109,6 +109,10 @@ Deno.test({
     ]);
   },
 });
+
+Deno.test(`foo`, () => {});
+Deno.test("foo", () => {});
+Deno.test("foo", () => {});
 
 Deno.test({
   name: '"a b c d" vs "a b x d e" (diffstr)',
@@ -313,4 +317,74 @@ Deno.test({
       { type: DiffType.common, value: "\n" },
     ]);
   },
+});
+
+Deno.test("diffSequence", () => {
+  const a = ["a", "b", "c"];
+  const b = ["a", "b", "d", "c"];
+  const res = diffSequence(a, b);
+  console.log(res);
+});
+
+Deno.test.only("diffSequence #2", () => {
+  const a = [
+    // "a",
+    // "b",
+    "c",
+    "d",
+    "g",
+    "h",
+    // "i",
+    // "j",
+  ];
+  const b = [
+    // "a",
+    // "b",
+    "e",
+    "f",
+    "g",
+    // "i",
+    // "j",
+  ];
+  const res = diffSequence(a, b);
+  console.log(res);
+});
+
+Deno.test("diffSequence #3", () => {
+  const a = `<div>
+  <div>
+    <p>
+    foo</p>
+  </div>
+  [object Object],barbaz</div>
+</div>
+`.split("\n");
+
+  const b = `<div>
+  <div>
+    <p>foo</p>
+    barbaz
+  </div>
+</div>
+`.split("\n");
+  const res = diffSequence(a, b);
+  console.log(res);
+});
+
+Deno.test.only("diffSequence #4", () => {
+  const a = [
+    "a",
+    "e",
+    "f",
+    "g",
+  ];
+  const b = [
+    "h",
+    "l",
+    "m",
+    "f",
+    "p",
+  ];
+  const res = diffSequence(a, b);
+  console.log(res);
 });

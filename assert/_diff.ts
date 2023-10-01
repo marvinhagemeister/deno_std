@@ -47,12 +47,261 @@ function createCommon<T>(A: T[], B: T[], reverse?: boolean): T[] {
   return common;
 }
 
+function debug(a: any[], b: any[], arr: number[] | Uint32Array, m: number) {
+  let out = "\n";
+  out += "  " +
+    Array.from(a.join("").replace(/\n/g, "").replace(/\\n/g, "")).join(" ");
+  out += "\n";
+
+  const b2 = Array.from(b.join("").replace(/\n/g, "").replace(/\\n/g, ""));
+
+  let row = 0;
+  for (let i = 0; i < arr.length; i++) {
+    if (i % m === 0) {
+      if (i > 0) {
+        out += " ".repeat(m) + "\n";
+      }
+      out += b2[row];
+      row++;
+    }
+
+    const char = arr[i] === DiffKind.common
+      ? "↘"
+      : arr[i] === DiffKind.insert
+      ? "↓"
+      : arr[i] === DiffKind.delete
+      ? "→"
+      : "-";
+    out += " " + char;
+  }
+  out += "\n\n";
+
+  console.log(out);
+}
+
+function debugV(v: Uint32Array, max: number) {
+  const charLens = new Uint32Array(v.length);
+
+  let out = "";
+  let j = 0;
+  for (let i = -max; i < max + 1; i++) {
+    const s = String(i);
+    charLens[j++] = s.length;
+    out += s + " ";
+  }
+
+  out += "\n";
+  for (let i = 0; i < v.length; i++) {
+    out += String(v[i]).padStart(charLens[i], " ") + " ";
+  }
+
+  out += "\n";
+  console.log(out);
+}
+
+function debugV2(v: Uint32Array, d: number) {
+  let out = "  ";
+
+  console.log(d);
+
+  for (let i = 0; i < d; i++) {
+    out += `${i} `;
+  }
+  out += "\n\n  ";
+
+  for (let i = 0; i < v.length; i++) {
+    if (i > 0 && i % d === 0) {
+      out += "\n  ";
+    }
+
+    out += v[i] + " ";
+  }
+
+  out += "\n";
+  console.log(out);
+}
+
+function printTable(m: number, n: number) {
+  let f = "";
+  let s = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < m; j++) {
+      f += "0, ";
+      s++;
+    }
+    f += "\n";
+  }
+  console.log(f);
+  console.log(s);
+}
+
+enum DiffKind {
+  insert = 1,
+  delete = 2,
+  common = 3,
+}
+
+export function diffSequence<T>(a: T[], b: T[]): Array<DiffResult<T>> {
+  console.log(a);
+  console.log(b);
+  const aLen = a.length;
+  const bLen = b.length;
+
+  // Short-circuit if both sequences are empty
+  if (aLen === 0 && bLen === 0) return [];
+
+  // Optimization: We can narrow down the problem space ignoring
+  // matching start and end items in both sequences. In many
+  // scenarios changes only tend to happen somewhere in the middle.
+
+  // Find matches at the start
+  const commonPrefix: DiffResult<T>[] = [];
+  const minLen = aLen > bLen ? bLen : aLen;
+  let start = 0;
+  for (start = 0; start < minLen; start++) {
+    if (a[start] !== b[start]) break;
+    commonPrefix.push({ type: DiffType.common, value: a[start] });
+  }
+
+  // // Find matches at the end
+  const commonSuffix: DiffResult<T>[] = [];
+  const endLimit = minLen - start;
+  for (let i = 1; i < endLimit + 1; i++) {
+    if (a[aLen - i] !== b[bLen - i]) {
+      break;
+    }
+
+    commonSuffix.push({ type: DiffType.common, value: a[aLen - i] });
+  }
+  const end = commonSuffix.length;
+
+  // If we consumed the length of the smaller sequence, then
+  // both sequences must be equal and contain no differences.
+  if (start + end === minLen) {
+    return [];
+  }
+
+  // Now we need to find the differences in the remaining subsequence.
+  // For that we use the algorithm described in:
+  //   "An O(ND) Difference Algorithm and Its Variations'
+  //   by Eugene W. Myers"
+
+  // Ensure that we always have a portrait view grid instead of one in
+  // landscape if possible, as this reduces the problem space. When
+  // we do that insertions and deletions are swapped, and we need
+  // to account for this during display.
+  // const swapped = aLen > bLen;
+  const swapped = false;
+
+  const n = aLen - start - end;
+  const m = bLen - start - end;
+  const max = m + n; // max moves
+
+  console.log("PRE + SUF");
+  console.log(a.slice(start, -end));
+  console.log(b.slice(start, -end));
+
+  const trace: Array<Uint32Array> = [];
+
+  const v = new Uint32Array(2 * max + 1);
+  search: for (let d = 0; d < max; d++) {
+    if (d > 0) {
+      trace.push(v.slice());
+    }
+
+    // Skip calculating path that are outside of the grid
+    const mMax = d - m > 0 ? d - m : 0;
+    const nMax = d - n > 0 ? d - n : 0;
+    for (let k = -(d - 2 * mMax); k < d - 2 * nMax + 1; k += 2) {
+      let x = 0;
+      let y = 0;
+
+      if (k === -d || (k !== d && v[(k - 1) + max] < v[(k + 1) + max])) {
+        x = v[(k + 1) + max];
+      } else {
+        x = v[max + (k - 1)] + 1;
+      }
+
+      y = x - k;
+
+      // Check if we can move diagonally
+      while (x < n && y < m && a[x + start] === b[y + start]) {
+        x++;
+        y++;
+      }
+
+      v[k + max] = x;
+
+      // We reached the end
+      if (x >= n && y >= m) {
+        console.log("found", d, k, x, y);
+        break search;
+      }
+    }
+  }
+
+  let s = "";
+  for (let i = 0; i < 2 * max + 1; i++) {
+    for (let j = 0; j < trace.length; j++) {
+      s += `${trace[j][i]} `;
+    }
+    s += "\n";
+  }
+
+  // Trace
+  console.log(s);
+
+  return [];
+}
+
+function diffKindToType(kind: DiffKind) {
+  switch (kind) {
+    case DiffKind.insert:
+      return DiffType.added;
+    case DiffKind.delete:
+      return DiffType.removed;
+    case DiffKind.common:
+      return DiffType.common;
+  }
+}
+
+function diffRecursive<T>(a: T[], b: T[], i: number, j: number) {
+  const n = a.length;
+  const m = b.length;
+
+  if (n > 0 && m > 0) {
+    const l = n + m;
+    const z = 2 * (n > m ? m : n) + 2;
+
+    const w = n - m;
+    const g = new Uint32Array(z);
+    const p = new Uint32Array(z);
+
+    // const limit = (l/2+(l%2!=0))+1
+    // for (let h = 0; h < ; h++) {
+
+    // }
+  } else if (n > 0) {
+    for (let i = 0; i < n; i++) {
+      console.log("DELETE", a[i + n]);
+    }
+  } else {
+    for (let i = 0; i < m; i++) {
+      console.log("Insert", b[i + n]);
+    }
+  }
+
+  return [];
+}
+
 /**
  * Renders the differences between the actual and expected values
  * @param A Actual value
  * @param B Expected value
  */
 export function diff<T>(A: T[], B: T[]): Array<DiffResult<T>> {
+  return diffSequence(A, B);
+  // return diffRecursive(A, B, 0, 0);
   const prefixCommon = createCommon(A, B);
   const suffixCommon = createCommon(
     A.slice(prefixCommon.length),
